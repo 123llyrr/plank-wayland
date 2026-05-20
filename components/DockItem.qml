@@ -49,7 +49,7 @@ Rectangle {
     property real offset: offsetBase * (zoomInPercent - 1) * (1 - offsetPercent / 3)
     property real centerPosition: staticCenter + (dockMouseX > staticCenter ? -offset : offset)
     property real lift: baseItemSize * zoom / 2 - baseItemSize / 2
-    readonly property real bounceLift: 0
+    property real bounceLift: 0
     readonly property real hitHorizontalMargin: Math.ceil(Math.max(6, (baseItemSize * zoom - baseItemSize) / 2 + 8))
     readonly property real hitTopMargin: Math.ceil(Math.max(6, lift + bounceLift + (baseItemSize * zoom - baseItemSize) + 8))
 
@@ -59,6 +59,7 @@ Rectangle {
             return
         }
 
+        launchBounce.restart()
         root.activate(root.app)
     }
 
@@ -213,6 +214,25 @@ Rectangle {
         onPressed: function(mouse) {
             root.trigger(mouse.button)
             mouse.accepted = true
+        }
+    }
+
+    SequentialAnimation {
+        id: launchBounce
+        running: false
+        NumberAnimation {
+            target: root
+            property: "bounceLift"
+            to: Math.min(root.baseItemSize * 0.3, root.baseItemSize * DockSettings.dock.launchBounceHeight)
+            duration: Math.max(45, DockSettings.dock.launchBounceTime * 0.32)
+            easing.type: Easing.OutCubic
+        }
+        NumberAnimation {
+            target: root
+            property: "bounceLift"
+            to: 0
+            duration: Math.max(60, DockSettings.dock.launchBounceTime * 0.42)
+            easing.type: Easing.OutBack
         }
     }
 }

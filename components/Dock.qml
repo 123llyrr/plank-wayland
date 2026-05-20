@@ -79,6 +79,20 @@ Item {
 
     onDockHoveredChanged: zoomProgress = dockHovered ? 1 : 0
 
+    Behavior on zoomProgress {
+        NumberAnimation {
+            duration: Math.max(0, DockSettings.dock.zoomDuration)
+            easing.type: Easing.OutCubic
+        }
+    }
+
+    Behavior on y {
+        NumberAnimation {
+            duration: Math.max(0, DockSettings.dock.slideTime)
+            easing.type: Easing.OutCubic
+        }
+    }
+
     Timer {
         id: hoverLeaveTimer
         interval: 70

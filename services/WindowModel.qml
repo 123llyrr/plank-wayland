@@ -196,8 +196,24 @@ Item {
         }
     }
 
+    function toplevelId(toplevel, fallbackIndex) {
+        if (!toplevel) return String(fallbackIndex)
+        try {
+            const ipc = toplevel.lastIpcObject
+            return String(toplevel.address || (ipc && ipc.address) || toplevel.title || fallbackIndex)
+        } catch (e) {
+            return String(toplevel.title || fallbackIndex)
+        }
+    }
+
+    function toplevelSignature(toplevels) {
+        const ids = []
+        for (let i = 0; i < toplevels.length; i++) ids.push(toplevelId(toplevels[i], i))
+        return ids.join(",")
+    }
+
     function appSignature(app) {
-        return [app.appId, app.desktopId, app.name, app.icon, app.command, app.pinned, app.running, app.pending, app.toplevels.length].join("|")
+        return [app.appId, app.desktopId, app.name, app.icon, app.command, app.pinned, app.running, app.pending, toplevelSignature(app.toplevels)].join("|")
     }
 
     function rawEventName(event) {
@@ -313,6 +329,14 @@ Item {
     Connections {
         target: Hyprland.toplevels
         function onValuesChanged() { root.scheduleUpdate(false) }
+    }
+
+    Connections {
+        target: DesktopEntries.applications
+        function onValuesChanged() {
+            root.entryCache = ({})
+            root.scheduleUpdate(false)
+        }
     }
 
     Connections {

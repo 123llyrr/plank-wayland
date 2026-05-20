@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-project_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+script_path="$(readlink -f -- "${BASH_SOURCE[0]}")"
+project_dir="$(cd -- "$(dirname -- "$script_path")" && pwd)"
 
 if [[ ! -w "$project_dir/settings.js" || ! -w "$project_dir/apps.js" ]]; then
   user_dir="${XDG_CONFIG_HOME:-$HOME/.config}/plank-wayland"
   mkdir -p "$user_dir"
 
-  for path in shell.qml i18n.js README.md run.sh components services; do
+  for path in shell.qml i18n.js README.md run.sh components services icons; do
     rm -rf "$user_dir/$path"
     cp -a "$project_dir/$path" "$user_dir/$path"
   done

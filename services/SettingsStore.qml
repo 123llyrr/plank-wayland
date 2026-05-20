@@ -353,7 +353,7 @@ Item {
     }
 
     Timer {
-        interval: 1500
+        interval: 5000
         repeat: true
         running: root.followSystemIconTheme
         onTriggered: {
