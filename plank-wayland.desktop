@@ -1,8 +1,8 @@
 [Desktop Entry]
 Type=Application
-Name=plank-wayland
+Name=Plank Wayland
 Comment=Plank-like Wayland dock and launcher powered by Quickshell
 Exec=plank-wayland
-Icon=preferences-desktop-dock
+Icon=plank-wayland
 Terminal=false
-Categories=Utility;DesktopSettings;
+Categories=Settings;DesktopSettings;

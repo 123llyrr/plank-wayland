@@ -1,6 +1,6 @@
 pkgbase = plank-wayland-git
 	pkgdesc = Plank-like Wayland dock and launcher powered by Quickshell
-	pkgver = r2.a6f47d0
+	pkgver = r3.1334e4c
 	pkgrel = 1
 	url = https://github.com/123llyrr/plank-wayland
 	arch = any
