@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=macOS Dock
+Comment=Standalone Quickshell macOS-style dock
+Exec=/home/liuxue/桌面/quickshell-macos-dock/run.sh
+Icon=preferences-desktop-dock
+Terminal=false
+Categories=Utility;
