@@ -6,7 +6,9 @@ Item {
     id: root
 
     property var pinnedApps: []
-    property var dockApps: []
+    readonly property var pinnedDockApps: pinnedApps.map(appFromPinned)
+    property var dockApps: pinnedDockApps
+    property bool ready: false
     property string modelSignature: ""
     property bool updateScheduled: false
     property bool refreshScheduled: false
@@ -34,12 +36,83 @@ Item {
         return ""
     }
 
+    function desktopEntryIds(appId) {
+        const id = normalizeId(appId)
+        const aliases = {
+            "obs": ["com.obsproject.Studio"],
+            "com.obsproject.studio": ["com.obsproject.Studio"]
+        }
+        const result = [appId, id]
+        const extra = aliases[id] || [iconForAppId(appId)]
+        for (let i = 0; i < extra.length; i++) {
+            if (result.indexOf(extra[i]) < 0) result.push(extra[i])
+        }
+        return result
+    }
+
+    function entryValue(entry, keys) {
+        if (!entry) return ""
+        for (let i = 0; i < keys.length; i++) {
+            try {
+                const value = entry[keys[i]]
+                if (value !== undefined && value !== null && String(value)) return String(value)
+            } catch (e) {}
+        }
+        return ""
+    }
+
+    function executableNameFromEntry(entry) {
+        const command = entryValue(entry, ["execString", "exec"])
+        if (command) {
+            const first = command.trim().split(/\s+/)[0]
+            const parts = first.split("/")
+            return parts[parts.length - 1]
+        }
+
+        try {
+            const values = entry.command ? Array.from(entry.command) : []
+            if (values.length > 0) {
+                const parts = String(values[0]).split("/")
+                return parts[parts.length - 1]
+            }
+        } catch (e) {}
+
+        return ""
+    }
+
+    function entryMatchesAppId(entry, appId) {
+        const id = normalizeId(appId)
+        const values = [
+            entryValue(entry, ["id", "desktopId"]),
+            entryValue(entry, ["name"]),
+            entryValue(entry, ["icon"]),
+            entryValue(entry, ["startupWmClass", "startupWMClass", "startupClass", "wmClass"]),
+            executableNameFromEntry(entry)
+        ]
+
+        for (let i = 0; i < values.length; i++) {
+            if (normalizeId(values[i]) === id) return true
+        }
+        return false
+    }
+
+    function scanDesktopEntry(appId) {
+        try {
+            const entries = DesktopEntries.applications.values || []
+            for (let i = 0; i < entries.length; i++) {
+                const entry = entries[i]
+                if (entryMatchesAppId(entry, appId)) return entry
+            }
+        } catch (e) {}
+        return null
+    }
+
     function desktopEntry(appId) {
         if (!appId) return null
         const cacheKey = String(appId).toLowerCase()
         if (entryCache[cacheKey] !== undefined) return entryCache[cacheKey]
 
-        const ids = [appId, cacheKey, iconForAppId(appId)]
+        const ids = desktopEntryIds(appId)
         let foundEntry = null
         for (let i = 0; i < ids.length; i++) {
             const id = ids[i]
@@ -48,12 +121,15 @@ Item {
                 if (foundEntry) break
             } catch (e) {}
         }
+        if (!foundEntry) foundEntry = scanDesktopEntry(appId)
         entryCache[cacheKey] = foundEntry
         return foundEntry
     }
 
     function iconForAppId(appId) {
         const id = normalizeId(appId)
+        if (id === "obs" || id === "com.obsproject.studio") return "obs"
+
         const aliases = {
             "alacritty": ["Alacritty", "org.alacritty.Alacritty", "alacritty", "/usr/share/pixmaps/Alacritty.svg"],
             "thunar": ["org.xfce.thunar", "Thunar", "thunar"],
@@ -70,14 +146,30 @@ Item {
         return String(appId || "").toLowerCase()
     }
 
+    function iconAliasesForAppId(appId) {
+        const id = normalizeId(appId)
+        if (id === "obs" || id === "com.obsproject.studio") return ["obs", "com.obsproject.Studio"]
+        return []
+    }
+
+    function entryCommand(entry, appId) {
+        if (!entry) return appId
+        try {
+            if (entry.command && entry.command.length !== undefined) return Array.from(entry.command)
+        } catch (e) {}
+        return entry.execString || appId
+    }
+
     function appFromId(appId, toplevels, pinned, pending) {
         const entry = pending ? null : desktopEntry(appId)
         const title = toplevels.length > 0 ? (toplevels[0].title || appId) : appId
         return {
             appId: appId,
+            desktopId: entry && entry.id ? entry.id : "",
             name: entry && entry.name ? entry.name : title,
-            icon: entry && entry.icon ? entry.icon : iconForAppId(appId),
-            command: entry && entry.execString ? entry.execString : appId,
+            icon: iconForAppId(appId) || (entry && entry.icon ? entry.icon : appId),
+            iconAliases: iconAliasesForAppId(appId),
+            command: entryCommand(entry, appId),
             fallback: appId.length > 0 ? appId[0].toUpperCase() : "?",
             pinned: pinned,
             running: pending || toplevels.length > 0,
@@ -86,8 +178,26 @@ Item {
         }
     }
 
+    function appFromPinned(pinned) {
+        const appId = pinned.appId || pinned.icon || pinned.name
+        const aliases = pinned.iconAliases || iconAliasesForAppId(appId)
+        return {
+            appId: appId,
+            desktopId: pinned.desktopId || "",
+            name: pinned.name || appId,
+            icon: aliases.length > 0 ? aliases[0] : (pinned.icon || appId),
+            iconAliases: aliases,
+            command: pinned.command || appId,
+            fallback: pinned.fallback || (appId.length > 0 ? appId[0].toUpperCase() : "?"),
+            pinned: true,
+            running: false,
+            pending: false,
+            toplevels: []
+        }
+    }
+
     function appSignature(app) {
-        return [app.appId, app.name, app.icon, app.command, app.pinned, app.running, app.pending, app.toplevels.length].join("|")
+        return [app.appId, app.desktopId, app.name, app.icon, app.command, app.pinned, app.running, app.pending, app.toplevels.length].join("|")
     }
 
     function rawEventName(event) {
@@ -181,17 +291,7 @@ Item {
             const appId = pinned.appId || pinned.icon || pinned.name
             const key = normalizeId(appId)
             const running = grouped[key]
-            result.push(running ? appFromId(running.appId, running.toplevels, true, !!running.pending) : {
-                appId: appId,
-                name: pinned.name || appId,
-                icon: pinned.icon || appId,
-                command: pinned.command || appId,
-                fallback: pinned.fallback || (appId.length > 0 ? appId[0].toUpperCase() : "?"),
-                pinned: true,
-                running: false,
-                pending: false,
-                toplevels: []
-            })
+            result.push(running ? appFromId(running.appId, running.toplevels, true, !!running.pending) : appFromPinned(pinned))
             used[key] = true
         }
 
@@ -203,6 +303,7 @@ Item {
         }
 
         const nextSignature = result.map(appSignature).join(";;")
+        if (!ready) ready = true
         if (nextSignature === modelSignature) return
         modelSignature = nextSignature
         dockApps = result

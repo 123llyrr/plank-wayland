@@ -13,8 +13,10 @@ Rectangle {
     readonly property int iconThemeRevision: settings ? settings.iconThemeRevision : 0
     readonly property string rawIcon: String(root.app.icon || "")
     readonly property bool rawFileIcon: rawIcon.startsWith("/")
+    readonly property bool launcherIcon: root.app.launcherIcon === true
     readonly property string lookupIcon: rawFileIcon ? String(root.app.appId || root.app.name || "") : rawIcon
-    readonly property string resolvedThemeIcon: settings ? settings.iconSource(lookupIcon, iconThemeRevision, rawFileIcon ? rawIcon : "") : resolveThemeIcon(lookupIcon, followSystemIconTheme, iconThemeRevision, rawFileIcon ? rawIcon : "")
+    readonly property var lookupIcons: buildLookupIcons()
+    readonly property string resolvedThemeIcon: settings ? settings.iconSource(lookupIcons, iconThemeRevision, rawFileIcon ? rawIcon : "") : resolveThemeIcon(lookupIcon, followSystemIconTheme, iconThemeRevision, rawFileIcon ? rawIcon : "")
     property int itemIndex: 0
 
     property real dockMouseX: -10000
@@ -29,7 +31,6 @@ Rectangle {
     property real bottomPadding: 0
     property real layerHeight: 118
     property bool hovered: false
-    property bool bouncing: false
 
     signal activate(var app)
     signal openMenu(var app)
@@ -48,22 +49,9 @@ Rectangle {
     property real offset: offsetBase * (zoomInPercent - 1) * (1 - offsetPercent / 3)
     property real centerPosition: staticCenter + (dockMouseX > staticCenter ? -offset : offset)
     property real lift: baseItemSize * zoom / 2 - baseItemSize / 2
-    property real bounceTime: 0
-    property real appearProgress: 0
-    readonly property real bounceLift: easingBounce(bounceTime, DockSettings.dock.launchBounceTime, 2) * baseItemSize * DockSettings.dock.launchBounceHeight
+    readonly property real bounceLift: 0
     readonly property real hitHorizontalMargin: Math.ceil(Math.max(6, (baseItemSize * zoom - baseItemSize) / 2 + 8))
     readonly property real hitTopMargin: Math.ceil(Math.max(6, lift + bounceLift + (baseItemSize * zoom - baseItemSize) + 8))
-
-    function easingBounce(t, d, n) {
-        if (d <= 0) return 0
-        const p = Math.max(0, Math.min(1, t / d))
-        return Math.abs(Math.sin(n * Math.PI * p) * Math.min(1, (1 - p) * (2 * n) / (2 * n - 1)))
-    }
-
-    function bounce() {
-        bouncing = true
-        bounceAnimation.restart()
-    }
 
     function trigger(button) {
         if (button === Qt.RightButton) {
@@ -71,12 +59,22 @@ Rectangle {
             return
         }
 
-        root.bounce()
         root.activate(root.app)
     }
 
     function reportPointer(localX) {
         pointerMoved(x + hitMouse.x + localX)
+    }
+
+    function buildLookupIcons() {
+        const result = []
+        const aliases = root.app.iconAliases || []
+        for (let i = 0; i < aliases.length; i++) {
+            const alias = String(aliases[i] || "")
+            if (alias && result.indexOf(alias) < 0) result.push(alias)
+        }
+        if (lookupIcon && result.indexOf(lookupIcon) < 0) result.push(lookupIcon)
+        return result
     }
 
     function resolveThemeIcon(icon, followTheme, revision, fallbackPath) {
@@ -85,35 +83,16 @@ Rectangle {
         return path || (fallbackPath ? "file://" + fallbackPath : "image://icon/" + icon)
     }
 
-    SequentialAnimation {
-        id: bounceAnimation
-        SpringAnimation {
-            target: root;
-            property: "bounceTime";
-            from: 0;
-            to: DockSettings.dock.launchBounceTime;
-            duration: DockSettings.dock.launchBounceTime;
-            spring: 2;
-            damping: 0.3
-        }
-        ScriptAction { script: root.bouncing = false }
-    }
-
     width: baseItemSize
     height: baseItemSize
     x: centerPosition - width / 2
     y: layerHeight - baseItemSize - bottomPadding
     z: zoom
-    opacity: appearProgress
-    scale: 0.94 + 0.06 * appearProgress
+    opacity: 1
+    scale: 1
     transformOrigin: Item.Bottom
     radius: 18
     color: app.running ? theme.runningItemColor : "transparent"
-
-    Component.onCompleted: appearProgress = 1
-
-    Behavior on appearProgress { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
-    Behavior on color { ColorAnimation { duration: 90 } }
 
     Item {
         id: iconShell
@@ -130,10 +109,28 @@ Rectangle {
             id: iconImage
             anchors.fill: parent
             anchors.margins: 5
-            source: root.resolvedThemeIcon
+            source: root.launcherIcon ? "image://icon/application-x-executable" : root.resolvedThemeIcon
             asynchronous: true
             mipmap: true
-            visible: status === Image.Ready
+            visible: !root.launcherIcon && status === Image.Ready
+        }
+
+        Grid {
+            anchors.centerIn: parent
+            columns: 3
+            rows: 3
+            spacing: Math.max(2, root.baseItemSize * 0.055)
+            visible: root.launcherIcon
+
+            Repeater {
+                model: 9
+                Rectangle {
+                    width: Math.max(5, root.baseItemSize * 0.14)
+                    height: width
+                    radius: width * 0.32
+                    color: "#f7ffffff"
+                }
+            }
         }
 
         Image {
@@ -151,7 +148,7 @@ Rectangle {
             anchors.margins: 5
             radius: 8
             color: Qt.hsla((root.app.appId.length * 0.137) % 1, 0.6, 0.7, 1)
-            visible: !iconImage.visible && !fileIconImage.visible
+            visible: !root.launcherIcon && !iconImage.visible && !fileIconImage.visible
 
             Text {
                 anchors.centerIn: parent

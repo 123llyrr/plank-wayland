@@ -39,6 +39,14 @@ def inherited_themes(theme):
     return []
 
 
+def related_themes(theme):
+    result = []
+    for suffix in ("-light", "-dark", "-Light", "-Dark"):
+        if theme.endswith(suffix):
+            result.append(theme[: -len(suffix)])
+    return result
+
+
 def theme_chain(theme):
     result = []
     queue = [theme] if theme else []
@@ -50,6 +58,7 @@ def theme_chain(theme):
             continue
         seen.add(current)
         result.append(current)
+        queue.extend(related_themes(current))
         queue.extend(inherited_themes(current))
 
     if "hicolor" not in seen:
@@ -94,6 +103,7 @@ def resolve(theme, icons):
         return {icon: best[icon][1] for icon in requested}
 
     for theme_name in theme_chain(theme):
+        theme_best = {}
         for directory in icon_dirs(theme_name):
             for root, dirs, files in os.walk(directory):
                 dirs[:] = [name for name in dirs if not name.startswith(".")]
@@ -104,8 +114,14 @@ def resolve(theme, icons):
 
                     path = os.path.join(root, filename)
                     score = candidate_score(path)
-                    if name not in best or score > best[name][0]:
-                        best[name] = (score, path)
+                    if name not in theme_best or score > theme_best[name][0]:
+                        theme_best[name] = (score, path)
+
+        for name, value in theme_best.items():
+            best[name] = value
+            missing.discard(name)
+        if not missing:
+            break
 
     return {icon: best.get(icon, (0, ""))[1] for icon in requested}
 

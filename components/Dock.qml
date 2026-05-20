@@ -29,7 +29,8 @@ Item {
     readonly property real dockPadding: Math.max(0, DockSettings.dock.horizPadding * baseItemSize / 10) + 28
     readonly property real topPadding: DockSettings.dock.topPadding * baseItemSize / 10
     readonly property real bottomPadding: DockSettings.dock.bottomPadding * baseItemSize / 10
-    readonly property real dockItemsWidth: Math.max(0, apps.length * baseItemSize + (apps.length - 1) * dockSpacing)
+    readonly property int totalItemCount: apps.length + 1
+    readonly property real dockItemsWidth: Math.max(0, totalItemCount * baseItemSize + (totalItemCount - 1) * dockSpacing)
     readonly property real dockMaxWidth: Math.ceil(dockItemsWidth + dockPadding * 2 + (maxItemSize - baseItemSize) * 2)
     readonly property real layerHeight: Math.ceil(baseItemSize + Math.max(0, -topPadding) + bottomPadding + (maxItemSize - baseItemSize) + 40)
     readonly property real barHorizontalPadding: Math.max(6, DockSettings.dock.horizPadding * baseItemSize / 10 + 6)
@@ -44,6 +45,7 @@ Item {
 
     signal activate(var app)
     signal openMenu(var app)
+    signal launch()
 
     function appKey(app) {
         return String((app && (app.appId || app.icon || app.name)) || "").toLowerCase().replace(/\.desktop$/, "")
@@ -73,13 +75,9 @@ Item {
     implicitHeight: baseItemSize + topPadding + bottomPadding
     y: (layerHeight - height) + (hidden ? DockSettings.dock.hideOffset : 0)
 
-    Behavior on y { NumberAnimation { duration: DockSettings.dock.slideTime; easing.type: Easing.OutCubic } }
     // The transparent layer stays larger so magnified icons have room above the bar.
 
     onDockHoveredChanged: zoomProgress = dockHovered ? 1 : 0
-    Behavior on zoomProgress {
-        NumberAnimation { duration: DockSettings.dock.zoomDuration; easing.type: Easing.OutCubic }
-    }
 
     Timer {
         id: hoverLeaveTimer
@@ -97,7 +95,7 @@ Item {
         anchors.bottom: itemsLayer.bottom
         width: root.barWidth
         height: root.barHeight
-        visible: root.apps.length > 0
+        visible: root.totalItemCount > 0
 
         Rectangle {
             anchors.fill: parent
@@ -134,19 +132,50 @@ Item {
 
 
         Repeater {
-            model: root.apps
+            model: [null].concat(root.apps)
 
-            DockItem {
+            Loader {
                 required property var modelData
                 required property int index
 
+                sourceComponent: index === 0 ? launcherComp : itemComp
+
+                property var app: modelData
+                property int itemIndex: index
+            }
+        }
+
+        Component {
+            id: launcherComp
+            LauncherItem {
+                settings: root.settings
+                dockMouseX: root.dockMouseX
+                zoomProgress: root.zoomProgress
+                dockWidth: root.width
+                itemCount: root.apps.length + 1
+                baseItemSize: root.baseItemSize
+                zoomPercent: root.zoomPercent
+                zoomIconSize: root.zoomEnabled ? root.maxItemSize : root.baseItemSize
+                dockSpacing: root.dockSpacing
+                dockItemsWidth: root.dockItemsWidth
+                bottomPadding: root.bottomPadding
+                layerHeight: root.layerHeight
+                onPointerMoved: dockX => root.updatePointer(dockX)
+                onPointerExited: root.schedulePointerLeave()
+                onLaunchRequested: root.launch()
+            }
+        }
+
+        Component {
+            id: itemComp
+            DockItem {
                 app: modelData
                 settings: root.settings
                 itemIndex: index
                 dockMouseX: root.dockMouseX
                 zoomProgress: root.zoomProgress
                 dockWidth: root.width
-                itemCount: root.apps.length
+                itemCount: root.apps.length + 1
                 baseItemSize: root.baseItemSize
                 zoomPercent: root.zoomPercent
                 zoomIconSize: root.zoomEnabled ? root.maxItemSize : root.baseItemSize

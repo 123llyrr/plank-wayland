@@ -1,4 +1,5 @@
 import Quickshell.Io
+import Quickshell
 import QtQuick
 import "../apps.js" as DockApps
 
@@ -16,9 +17,14 @@ Item {
     function identityKeys(app) {
         if (!app) return []
         const keys = []
-        const fields = [app.appId, app.icon, app.name]
+        const fields = [app.appId, app.desktopId, app.icon, app.name]
+        const aliases = app.iconAliases || []
         for (let i = 0; i < fields.length; i++) {
             const key = normalizeId(fields[i])
+            if (key && keys.indexOf(key) < 0) keys.push(key)
+        }
+        for (let i = 0; i < aliases.length; i++) {
+            const key = normalizeId(aliases[i])
             if (key && keys.indexOf(key) < 0) keys.push(key)
         }
         return keys
@@ -45,8 +51,10 @@ Item {
         const next = apps.slice()
         next.push({
             appId: app.appId,
+            desktopId: app.desktopId,
             name: app.name,
             icon: app.icon,
+            iconAliases: app.iconAliases,
             fallback: app.fallback,
             command: app.command
         })
@@ -64,7 +72,7 @@ Item {
 
     FileView {
         id: file
-        path: "/home/liuxue/桌面/quickshell-macos-dock/apps.js"
+        path: Quickshell.shellPath("apps.js")
         blockWrites: false
         atomicWrites: true
         printErrors: true

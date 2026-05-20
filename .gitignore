@@ -4,3 +4,6 @@ __pycache__/
 *.tmp
 *.bak
 macos-dock.desktop
+pkg/
+src/
+*.pkg.tar*

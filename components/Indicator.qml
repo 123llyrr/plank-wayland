@@ -28,7 +28,4 @@ Rectangle {
         color: indicatorColor
         opacity: root.active && root.legacyStyle ? 0.18 : 0
     }
-
-    Behavior on width { NumberAnimation { duration: DockSettings.dock.fadeTime; easing.type: Easing.OutCubic } }
-    Behavior on opacity { NumberAnimation { duration: DockSettings.dock.fadeTime; easing.type: Easing.OutCubic } }
 }

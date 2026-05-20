@@ -20,9 +20,6 @@ Item {
     y: shown ? -height - 10 : -height - 6
     enabled: false // Ensure it doesn't intercept mouse events
 
-    Behavior on opacity { NumberAnimation { duration: DockSettings.dock.fadeTime; easing.type: Easing.OutCubic } }
-    Behavior on y { NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
-
     Rectangle {
         id: bubble
         width: label.implicitWidth + 18

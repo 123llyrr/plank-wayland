@@ -1,4 +1,4 @@
-# Quickshell macOS Dock
+# plank-wayland
 
 当前逻辑参考 Plank：
 

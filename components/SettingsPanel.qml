@@ -200,6 +200,14 @@ Rectangle {
             wrapMode: Text.WordWrap
             font.pixelSize: 11
         }
+
+        SettingsButton {
+            Layout.fillWidth: true
+            settings: root.store
+            neutral: false
+            text: root.store && root.store.dirty ? root.t("saveChanges") : root.t("saved")
+            onClicked: if (root.store) root.store.save()
+        }
         }
     }
 }

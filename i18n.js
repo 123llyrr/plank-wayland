@@ -24,7 +24,9 @@ var zh = {
     on: "开",
     off: "关",
     px: "px",
-    savedHint: "修改会立即生效，并保存到 settings.js。",
+    savedHint: "修改会立即预览，点击保存写入本 Dock 的 settings.js。",
+    saveChanges: "保存设置",
+    saved: "已保存",
     indicator_dot: "圆点",
     indicator_line: "线条",
     indicator_legacy: "经典"
@@ -54,7 +56,9 @@ var en = {
     on: "On",
     off: "Off",
     px: "px",
-    savedHint: "Changes apply immediately and are saved to settings.js.",
+    savedHint: "Changes preview immediately. Click save to write this Dock's settings.js.",
+    saveChanges: "Save Settings",
+    saved: "Saved",
     indicator_dot: "dot",
     indicator_line: "line",
     indicator_legacy: "legacy"

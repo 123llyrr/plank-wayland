@@ -3,6 +3,20 @@ set -euo pipefail
 
 project_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
+if [[ ! -w "$project_dir/settings.js" || ! -w "$project_dir/apps.js" ]]; then
+  user_dir="${XDG_CONFIG_HOME:-$HOME/.config}/plank-wayland"
+  mkdir -p "$user_dir"
+
+  for path in shell.qml i18n.js README.md run.sh components services; do
+    rm -rf "$user_dir/$path"
+    cp -a "$project_dir/$path" "$user_dir/$path"
+  done
+
+  [[ -e "$user_dir/settings.js" ]] || cp -a "$project_dir/settings.js" "$user_dir/settings.js"
+  [[ -e "$user_dir/apps.js" ]] || cp -a "$project_dir/apps.js" "$user_dir/apps.js"
+  project_dir="$user_dir"
+fi
+
 follow_icon_theme_enabled() {
   local line
   [[ -r "$project_dir/settings.js" ]] || return 0

@@ -22,6 +22,14 @@ Item {
     property string indicatorStyle: DockSettings.theme.indicatorStyle
     property int radiusAdjust: 0
     property int opacityAdjust: 0
+    property var launcherDefaults: DockSettings.launcher || ({})
+    property string launcherLayoutMode: launcherDefaults.layoutMode || "auto"
+    property string launcherBackgroundStyle: launcherDefaults.backgroundStyle || "glass"
+    property bool launcherShowLabels: launcherDefaults.showLabels !== false
+    property bool launcherHoverMagnification: launcherDefaults.hoverMagnification === true
+    property bool launcherPressFeedback: launcherDefaults.pressFeedback === true
+    property real launcherIconScale: launcherDefaults.iconScale || 1
+    property bool dirty: false
     readonly property var theme: buildTheme(styleName, indicatorStyle)
 
     signal changed()
@@ -82,19 +90,34 @@ Item {
     function refreshSystemIconTheme(restartOnChange) {
         const next = detectSystemIconTheme()
         const changed = next !== systemIconTheme
-        if (changed) systemIconTheme = next
         if (changed) {
+            systemIconTheme = next
             iconCache = ({})
             pendingIconRequests = ({})
         }
-        iconThemeRevision += 1
+        if (changed || !iconThemeLoaded) iconThemeRevision += 1
         iconThemeLoaded = true
     }
 
     function fallbackIconSource(icon, fallbackPath) {
         if (fallbackPath && String(fallbackPath).startsWith("/")) return "file://" + fallbackPath
+        if (!icon) return ""
         const path = Quickshell.iconPath(icon, true)
         return path || "image://icon/" + icon
+    }
+
+    function iconNames(icon) {
+        const result = []
+        if (Array.isArray(icon)) {
+            for (let i = 0; i < icon.length; i++) {
+                const name = String(icon[i] || "")
+                if (name && result.indexOf(name) < 0) result.push(name)
+            }
+        } else {
+            const name = String(icon || "")
+            if (name) result.push(name)
+        }
+        return result
     }
 
     function iconCacheKey(icon) {
@@ -113,18 +136,25 @@ Item {
     }
 
     function iconSource(icon, revision, fallbackPath) {
-        const name = String(icon || "")
-        if (!name) return fallbackIconSource(name, fallbackPath)
-        if (name[0] === "/") return "file://" + name
-        if (!followSystemIconTheme || !systemIconTheme) return fallbackIconSource(name, fallbackPath)
+        const names = iconNames(icon)
+        const fallbackName = names.length > 0 ? names[0] : ""
+        if (fallbackName && fallbackName[0] === "/") return "file://" + fallbackName
+        if (!followSystemIconTheme) return fallbackIconSource(fallbackName, fallbackPath)
+        if (!systemIconTheme) return Array.isArray(icon) ? "" : fallbackIconSource(fallbackName, fallbackPath)
 
-        const key = iconCacheKey(name)
-        if (iconCache[key] !== undefined) {
-            return iconCache[key] ? "file://" + iconCache[key] : fallbackIconSource(name, fallbackPath)
+        let waitingForAlias = false
+        for (let i = 0; i < names.length; i++) {
+            const key = iconCacheKey(names[i])
+            if (iconCache[key] === undefined) {
+                waitingForAlias = waitingForAlias || names.length > 1
+                Qt.callLater(requestIcon, names[i])
+                continue
+            }
+            if (iconCache[key]) return "file://" + iconCache[key]
         }
 
-        requestIcon(name)
-        return fallbackIconSource(name, fallbackPath)
+        if (waitingForAlias) return ""
+        return fallbackIconSource(fallbackName, fallbackPath)
     }
 
     function resolvePendingIcons() {
@@ -173,6 +203,11 @@ Item {
         return base
     }
 
+    function markDirty() {
+        dirty = true
+        changed()
+    }
+
     function save() {
         const dock = {
             iconSize: iconSize,
@@ -198,17 +233,28 @@ Item {
             menuBottomMargin: DockSettings.dock.menuBottomMargin
         }
 
+        const launcher = {
+            layoutMode: launcherLayoutMode,
+            backgroundStyle: launcherBackgroundStyle,
+            showLabels: launcherShowLabels,
+            hoverMagnification: launcherHoverMagnification,
+            pressFeedback: launcherPressFeedback,
+            iconScale: launcherIconScale
+        }
+
         const styles = JSON.parse(JSON.stringify(DockSettings.styles))
-        if (styles[styleName]) styles[styleName].indicatorStyle = indicatorStyle
+        if (styles[styleName]) styles[styleName] = buildTheme(styleName, indicatorStyle)
 
         const text = ".pragma library\n\n"
             + "var dock = " + JSON.stringify(dock, null, 4) + "\n\n"
             + "var styleName = " + JSON.stringify(styleName) + "\n\n"
             + "var uiLanguage = " + JSON.stringify(uiLanguage) + "\n\n"
+            + "var launcher = " + JSON.stringify(launcher, null, 4) + "\n\n"
             + "var styles = " + JSON.stringify(styles, null, 4) + "\n\n"
             + "var theme = styles[styleName] || styles.macos\n"
 
         file.setText(text)
+        dirty = false
         changed()
     }
 
@@ -217,63 +263,104 @@ Item {
         indicatorStyle = styleDefaults(name).indicatorStyle || "dot"
         radiusAdjust = 0
         opacityAdjust = 0
-        save()
+        markDirty()
     }
 
     function setIconSize(value) {
         iconSize = Math.max(32, Math.min(96, value))
-        save()
+        markDirty()
     }
 
     function setZoomPercent(value) {
         zoomPercent = Math.max(100, Math.min(300, value))
-        save()
+        markDirty()
     }
 
     function toggleZoom() {
         zoomEnabled = !zoomEnabled
-        save()
+        markDirty()
     }
 
     function toggleFollowSystemIconTheme() {
         followSystemIconTheme = !followSystemIconTheme
         refreshSystemIconTheme(false)
-        save()
+        markDirty()
     }
 
     function toggleAutoHide() {
         autoHide = !autoHide
-        save()
+        markDirty()
     }
 
     function toggleSmartHide() {
         smartHide = !smartHide
-        save()
+        markDirty()
     }
 
     function cycleIndicator() {
         const styles = ["dot", "line", "legacy"]
         const index = styles.indexOf(indicatorStyle)
         indicatorStyle = styles[(index + 1) % styles.length]
-        save()
+        markDirty()
     }
 
     function adjustRadius(delta) {
         radiusAdjust = Math.max(-16, Math.min(24, radiusAdjust + delta))
-        changed()
+        markDirty()
     }
 
     function adjustOpacity(delta) {
         opacityAdjust = Math.max(-96, Math.min(96, opacityAdjust + delta))
-        changed()
+        markDirty()
+    }
+
+    function setLauncherLayoutMode(value) {
+        launcherLayoutMode = ["auto", "compact", "fullscreen"].indexOf(value) >= 0 ? value : "auto"
+        markDirty()
+    }
+
+    function setLauncherBackgroundStyle(value) {
+        launcherBackgroundStyle = ["glass", "blue", "dark"].indexOf(value) >= 0 ? value : "glass"
+        markDirty()
+    }
+
+    function setLauncherIconScale(value) {
+        launcherIconScale = Math.max(0.75, Math.min(1.35, value))
+        markDirty()
+    }
+
+    function toggleLauncherShowLabels() {
+        launcherShowLabels = !launcherShowLabels
+        markDirty()
+    }
+
+    function toggleLauncherHoverMagnification() {
+        launcherHoverMagnification = !launcherHoverMagnification
+        markDirty()
+    }
+
+    function toggleLauncherPressFeedback() {
+        launcherPressFeedback = !launcherPressFeedback
+        markDirty()
     }
 
     FileView {
         id: file
-        path: "/home/liuxue/桌面/quickshell-macos-dock/settings.js"
+        path: Quickshell.shellPath("settings.js")
         blockWrites: false
         atomicWrites: true
         printErrors: true
+    }
+
+    Timer {
+        interval: 1500
+        repeat: true
+        running: root.followSystemIconTheme
+        onTriggered: {
+            gtk3Settings.reload()
+            gtk4Settings.reload()
+            kdeGlobals.reload()
+        }
     }
 
     Timer {

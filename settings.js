@@ -1,7 +1,7 @@
 .pragma library
 
 var dock = {
-    "iconSize": 54,
+    "iconSize": 58,
     "zoomEnabled": true,
     "followSystemIconTheme": true,
     "zoomPercent": 180,
@@ -24,13 +24,22 @@ var dock = {
     "menuBottomMargin": 118
 }
 
-var styleName = "obsidian"
+var styleName = "macos"
 
 var uiLanguage = "zh-CN"
 
+var launcher = {
+    "layoutMode": "compact",
+    "backgroundStyle": "dark",
+    "showLabels": true,
+    "hoverMagnification": true,
+    "pressFeedback": true,
+    "iconScale": 1
+}
+
 var styles = {
     "macos": {
-        "radius": 24,
+        "radius": 8,
         "borderWidth": 1,
         "backgroundColor": "#66f7f7f7",
         "innerBackgroundColor": "#1f000000",
@@ -250,7 +259,7 @@ var styles = {
         "separatorColor": "#2264ffda"
     },
     "nebula": {
-        "radius": 28,
+        "radius": 12,
         "borderWidth": 1,
         "backgroundColor": "#990a0a0c",
         "innerBackgroundColor": "#22ffffff",
@@ -265,7 +274,7 @@ var styles = {
         "menuItemColor": "#1a1a1e",
         "menuItemHoverColor": "#2d2d34",
         "indicatorColor": "#ffffff",
-        "indicatorStyle": "line",
+        "indicatorStyle": "dot",
         "pinnedBadgeColor": "#ffcc00",
         "separatorColor": "#33ffffff"
     },

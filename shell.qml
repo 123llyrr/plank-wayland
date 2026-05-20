@@ -1,5 +1,6 @@
 import Quickshell
 import Quickshell.Hyprland
+import Quickshell.Wayland
 import QtQuick
 import "components"
 import "services"
@@ -10,6 +11,7 @@ ShellRoot {
 
     property var menuApp: null
     property bool menuOpen: false
+    property bool launcherOpen: false
     property bool settingsOpen: false
     property bool closeLayerOpen: false
     property real menuX: 0
@@ -37,6 +39,151 @@ ShellRoot {
         return false
     }
 
+    function normalizeId(id) {
+        return String(id || "").toLowerCase().replace(/\.desktop$/, "")
+    }
+
+    function desktopEntryForApp(app) {
+        if (!app) return null
+        const candidates = [app.desktopId, app.appId, app.icon, app.name]
+        for (let i = 0; i < candidates.length; i++) {
+            const id = String(candidates[i] || "")
+            if (!id || id.startsWith("/")) continue
+            try {
+                const entry = DesktopEntries.heuristicLookup(id) || DesktopEntries.byId(id) || DesktopEntries.byId(normalizeId(id))
+                if (entry) return entry
+            } catch (e) {}
+        }
+        for (let i = 0; i < candidates.length; i++) {
+            const entry = scanDesktopEntry(candidates[i])
+            if (entry) return entry
+        }
+        return null
+    }
+
+    function entryValue(entry, keys) {
+        if (!entry) return ""
+        for (let i = 0; i < keys.length; i++) {
+            try {
+                const value = entry[keys[i]]
+                if (value !== undefined && value !== null && String(value)) return String(value)
+            } catch (e) {}
+        }
+        return ""
+    }
+
+    function executableNameFromEntry(entry) {
+        const exec = entryValue(entry, ["execString", "exec"])
+        if (exec) {
+            const first = exec.trim().split(/\s+/)[0]
+            const parts = first.split("/")
+            return parts[parts.length - 1]
+        }
+        try {
+            const command = entry.command ? Array.from(entry.command) : []
+            if (command.length > 0) {
+                const parts = String(command[0]).split("/")
+                return parts[parts.length - 1]
+            }
+        } catch (e) {}
+        return ""
+    }
+
+    function entryMatchesId(entry, id) {
+        const normalized = normalizeId(id)
+        if (!normalized) return false
+        const values = [
+            entryValue(entry, ["id", "desktopId"]),
+            entryValue(entry, ["name"]),
+            entryValue(entry, ["icon"]),
+            entryValue(entry, ["startupWmClass", "startupWMClass", "startupClass", "wmClass"]),
+            executableNameFromEntry(entry)
+        ]
+        for (let i = 0; i < values.length; i++) {
+            if (normalizeId(values[i]) === normalized) return true
+        }
+        return false
+    }
+
+    function scanDesktopEntry(id) {
+        if (!id || String(id).startsWith("/")) return null
+        try {
+            const entries = DesktopEntries.applications.values || []
+            for (let i = 0; i < entries.length; i++) {
+                const entry = entries[i]
+                if (entryMatchesId(entry, id)) return entry
+            }
+        } catch (e) {}
+        return null
+    }
+
+    function commandArray(command) {
+        if (!command) return []
+        if (Array.isArray(command)) return command
+        if (typeof command === "string") return []
+        if (command.length !== undefined) return Array.from(command)
+        return []
+    }
+
+    function cleanedCommandArray(command) {
+        const values = commandArray(command)
+        const result = []
+        for (let i = 0; i < values.length; i++) {
+            const part = String(values[i] || "").trim()
+            if (!part || /^%[fFuUdDnNickvm]$/.test(part)) continue
+            result.push(part.replace(/%%/g, "%"))
+        }
+        while (result.length > 1 && result[result.length - 1] === "--") result.pop()
+        return result
+    }
+
+    function cleanedExec(text) {
+        let exec = String(text || "")
+        if (!exec) return ""
+        exec = exec.replace(/%%/g, "\u0000")
+        exec = exec.replace(/%[fFuUdDnNickvm]/g, "")
+        exec = exec.replace(/\u0000/g, "%")
+        exec = exec.replace(/\s+--\s*$/g, "")
+        exec = exec.replace(/\s+/g, " ")
+        return exec.trim()
+    }
+
+    function looksLikeDesktopId(command, app) {
+        const text = String(command || "").trim()
+        if (!text || text.indexOf(" ") >= 0 || text.indexOf("/") >= 0) return false
+        if (text.indexOf(".") >= 0) return true
+        const key = normalizeId(text)
+        return key === normalizeId(app && app.appId) || key === normalizeId(app && app.icon)
+    }
+
+    function launchApp(app) {
+        const entry = desktopEntryForApp(app)
+        const arrayCommand = cleanedCommandArray(app && app.command)
+        if (arrayCommand.length > 0) {
+            Quickshell.execDetached(arrayCommand)
+            return
+        }
+
+        const rawCommand = String((app && app.command) || "")
+        const command = cleanedExec(rawCommand)
+        if (command) {
+            if (entry && entry.execute && looksLikeDesktopId(command, app)) {
+                entry.execute()
+                return
+            }
+            Quickshell.execDetached(["sh", "-c", command])
+            return
+        }
+
+        if (entry && entry.execute) {
+            entry.execute()
+            return
+        }
+
+        const fallback = cleanedExec(app && app.appId)
+        if (fallback) Quickshell.execDetached(["sh", "-c", fallback])
+    }
+
     function activateApp(app) {
         if (!app) return
         if (app.running && app.toplevels.length > 0) {
@@ -52,7 +199,7 @@ ShellRoot {
             app.lastFocusIndex = targetIndex
             if (focusToplevel(app.toplevels[targetIndex])) return
         }
-        Quickshell.execDetached(["sh", "-c", app.command || app.appId])
+        launchApp(app)
     }
 
     SettingsStore {
@@ -95,6 +242,7 @@ ShellRoot {
 
     PanelWindow {
         id: dockWindow
+        visible: windowModel.ready
 
         anchors {
             bottom: true
@@ -108,11 +256,12 @@ ShellRoot {
         implicitWidth: dock.implicitWidth
         implicitHeight: dock.layerHeight
         exclusiveZone: (dock.hidden || !settingsStore.smartHide) ? 0 : dock.height
+        WlrLayershell.namespace: "plank-wayland-dock"
 
         Dock {
             id: dock
             anchors.horizontalCenter: parent.horizontalCenter
-            apps: windowModel.dockApps
+            apps: windowModel.dockApps.length > 0 ? windowModel.dockApps : windowModel.pinnedDockApps
             settings: settingsStore
             smartHideEnabled: settingsStore.smartHide
             isOverlapped: root.isOverlapped
@@ -125,6 +274,34 @@ ShellRoot {
                 root.menuBottomMargin = dock.menuBottomMargin
                 root.menuOpen = true
             }
+            onLaunch: root.launcherOpen = !root.launcherOpen
+        }
+    }
+
+    PanelWindow {
+        id: launcherWindow
+        visible: true
+
+        anchors {
+            top: true
+            bottom: true
+            left: true
+            right: true
+        }
+        color: "transparent"
+        exclusiveZone: 0
+        mask: Region { item: root.launcherOpen ? launcher : null }
+        WlrLayershell.namespace: "plank-wayland-launcher"
+        WlrLayershell.keyboardFocus: root.launcherOpen ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+        WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.exclusionMode: ExclusionMode.Ignore
+
+        AppLauncher {
+            id: launcher
+            anchors.fill: parent
+            shown: root.launcherOpen
+            settings: settingsStore
+            onCloseRequested: root.launcherOpen = false
         }
     }
 
